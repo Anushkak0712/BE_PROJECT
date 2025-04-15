@@ -1,0 +1,6 @@
+SERVER/.venv
+SERVER/uploads
+SERVER/test.py
+SERVER/__pycache__
+SERVER/*.pyc
+SERVER/first_impressions_model2.keras
