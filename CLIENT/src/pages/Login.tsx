@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import {
   Box,
   Container,
@@ -17,7 +17,7 @@ import { useNavigate, Link } from 'react-router-dom';
 import { styled } from '@mui/material/styles';
 import { useFormik } from 'formik';
 import * as Yup from 'yup';
-import { userUtils } from '../utils/userUtils';
+import { authApi } from '../api/auth';
 
 const StyledPaper = styled(Paper)(({ theme }) => ({
   padding: theme.spacing(4),
@@ -26,19 +26,27 @@ const StyledPaper = styled(Paper)(({ theme }) => ({
   marginTop: theme.spacing(8),
 }));
 
-const validationSchema = Yup.object({
-  email: Yup.string()
-    .email('Invalid email address')
-    .required('Email is required'),
-  password: Yup.string()
-    .min(8, 'Password must be at least 8 characters')
-    .required('Password is required'),
-  userType: Yup.string().required('Please select a user type'),
-});
-
 const Login = () => {
   const navigate = useNavigate();
   const [error, setError] = useState<string | null>(null);
+  const [apiStatus, setApiStatus] = useState<string>('');
+
+  // Test API connection on component mount
+  useEffect(() => {
+    const testConnection = async () => {
+      try {
+        const response = await fetch('http://localhost:5000/api/jobs');
+        const data = await response.json();
+        setApiStatus('Backend connection successful!');
+        console.log('API Response:', data);
+      } catch (err) {
+        setApiStatus('Failed to connect to backend. Make sure the server is running.');
+        console.error('API Error:', err);
+      }
+    };
+
+    testConnection();
+  }, []);
 
   const formik = useFormik({
     initialValues: {
@@ -46,21 +54,29 @@ const Login = () => {
       password: '',
       userType: '',
     },
-    validationSchema,
+    validationSchema: Yup.object({
+      email: Yup.string()
+        .email('Invalid email address')
+        .required('Email is required'),
+      password: Yup.string()
+        .required('Password is required'),
+      userType: Yup.string()
+        .required('Please select a user type'),
+    }),
     onSubmit: async (values) => {
       try {
         setError(null);
-        const { success, user, message } = await userUtils.login(values.email, values.password);
+        const result = await authApi.login({
+          email: values.email,
+          password: values.password,
+        });
 
-        if (!success) {
-          throw new Error(message);
+        if (result.success) {
+          const dashboard = values.userType === 'recruiter'
+            ? '/recruiter/dashboard'
+            : '/candidate/dashboard';
+          navigate(dashboard);
         }
-
-        // Handle successful login
-        const dashboard = user?.userType === 'recruiter'
-          ? '/recruiter/dashboard'
-          : '/candidate/dashboard';
-        navigate(dashboard);
       } catch (err) {
         setError(err instanceof Error ? err.message : 'Login failed');
       }
@@ -73,14 +89,13 @@ const Login = () => {
         <Typography variant="h4" align="center" gutterBottom>
           Welcome Back
         </Typography>
-        <Typography
-          variant="subtitle1"
-          align="center"
-          color="text.secondary"
-          gutterBottom
-        >
-          Sign in to continue to your account
-        </Typography>
+        
+        {/* Display API connection status */}
+        {apiStatus && (
+          <Alert severity={apiStatus.includes('successful') ? 'success' : 'error'} sx={{ mb: 2 }}>
+            {apiStatus}
+          </Alert>
+        )}
 
         {error && (
           <Alert severity="error" sx={{ mb: 2 }}>

@@ -24,6 +24,7 @@ import { useFormik } from 'formik';
 import * as Yup from 'yup';
 import { Visibility, VisibilityOff } from '@mui/icons-material';
 import { userUtils } from '../utils/userUtils';
+import { authApi } from '../api/auth';
 
 const StyledPaper = styled(Paper)(({ theme }) => ({
   padding: theme.spacing(4),
@@ -78,21 +79,25 @@ const Register = () => {
     onSubmit: async (values) => {
       try {
         setError(null);
-        const { success, message } = await userUtils.register({
-          firstName: values.firstName,
-          lastName: values.lastName,
+        const registerFn = values.userType === 'recruiter'
+          ? authApi.registerRecruiter
+          : authApi.registerCandidate;
+
+        const result = await registerFn({
+          username: `${values.firstName} ${values.lastName}`,
           email: values.email,
           password: values.password,
-          userType: values.userType as 'candidate' | 'recruiter',
-          company: values.company
+          ...(values.userType === 'recruiter' ? {
+            company_name: values.company,
+            position: 'Recruiter'
+          } : {
+            skills: []
+          })
         });
 
-        if (!success) {
-          throw new Error(message);
+        if (result.success) {
+          navigate('/login');
         }
-
-        // Handle successful registration
-        navigate('/login');
       } catch (err) {
         setError(err instanceof Error ? err.message : 'Registration failed');
       }
