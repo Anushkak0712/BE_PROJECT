@@ -58,11 +58,3 @@ def register_user(username, email, password):
 
 # Example usage:
 db = get_database()
-if db is not None:
-    # Test user registration
-    result = register_user("test_user", "test@example.com", "password123")
-    print(result)
-
-# Example usage:
-db = get_database()
-collection = db['users'] 

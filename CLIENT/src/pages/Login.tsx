@@ -6,18 +6,15 @@ import {
   Typography,
   TextField,
   Button,
-  FormControl,
-  FormControlLabel,
-  RadioGroup,
-  Radio,
   Alert,
   Stack,
+  Link,
 } from '@mui/material';
-import { useNavigate, Link } from 'react-router-dom';
+import { useNavigate, useLocation } from 'react-router-dom';
 import { styled } from '@mui/material/styles';
 import { useFormik } from 'formik';
 import * as Yup from 'yup';
-import { authApi } from '../api/auth';
+import { useAuth } from '../context/AuthContext';
 
 const StyledPaper = styled(Paper)(({ theme }) => ({
   padding: theme.spacing(4),
@@ -28,6 +25,8 @@ const StyledPaper = styled(Paper)(({ theme }) => ({
 
 const Login = () => {
   const navigate = useNavigate();
+  const location = useLocation();
+  const { login } = useAuth();
   const [error, setError] = useState<string | null>(null);
   const [apiStatus, setApiStatus] = useState<string>('');
 
@@ -52,30 +51,34 @@ const Login = () => {
     initialValues: {
       email: '',
       password: '',
-      userType: '',
     },
     validationSchema: Yup.object({
       email: Yup.string()
         .email('Invalid email address')
         .required('Email is required'),
-      password: Yup.string()
-        .required('Password is required'),
-      userType: Yup.string()
-        .required('Please select a user type'),
+      password: Yup.string().required('Password is required'),
     }),
     onSubmit: async (values) => {
       try {
         setError(null);
-        const result = await authApi.login({
-          email: values.email,
-          password: values.password,
-        });
-
-        if (result.success) {
-          const dashboard = values.userType === 'recruiter'
-            ? '/recruiter/dashboard'
+        const response = await login(values.email, values.password);
+        console.log('Login response in component:', response);
+        
+        // Get the intended destination or default to appropriate dashboard
+        const from = (location.state as any)?.from?.pathname;
+        if (from) {
+          navigate(from, { replace: true });
+        } else {
+          // Get user type from localStorage
+          const userType = localStorage.getItem('userType');
+          console.log('User type from localStorage:', userType);
+          
+          // Redirect to appropriate dashboard based on user type
+          const dashboardPath = userType === 'recruiter' 
+            ? '/recruiter/dashboard' 
             : '/candidate/dashboard';
-          navigate(dashboard);
+          console.log('Navigating to:', dashboardPath);
+          navigate(dashboardPath, { replace: true });
         }
       } catch (err) {
         setError(err instanceof Error ? err.message : 'Login failed');
@@ -105,31 +108,6 @@ const Login = () => {
 
         <form onSubmit={formik.handleSubmit}>
           <Stack spacing={3}>
-            <FormControl>
-              <RadioGroup
-                row
-                name="userType"
-                value={formik.values.userType}
-                onChange={formik.handleChange}
-              >
-                <FormControlLabel
-                  value="candidate"
-                  control={<Radio />}
-                  label="Candidate"
-                />
-                <FormControlLabel
-                  value="recruiter"
-                  control={<Radio />}
-                  label="Recruiter"
-                />
-              </RadioGroup>
-              {formik.touched.userType && formik.errors.userType && (
-                <Typography color="error" variant="caption">
-                  {formik.errors.userType}
-                </Typography>
-              )}
-            </FormControl>
-
             <TextField
               fullWidth
               id="email"
@@ -173,8 +151,9 @@ const Login = () => {
           <Typography variant="body2" color="text.secondary">
             Don't have an account?{' '}
             <Link
-              to="/register"
-              style={{ color: 'inherit', textDecoration: 'underline' }}
+              component="button"
+              variant="body2"
+              onClick={() => navigate('/register')}
             >
               Sign up here
             </Link>

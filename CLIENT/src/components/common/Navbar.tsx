@@ -11,12 +11,12 @@ import {
 } from '@mui/material';
 import { AccountCircle } from '@mui/icons-material';
 import { useNavigate, Link } from 'react-router-dom';
+import { useAuth } from '../../context/AuthContext';
 
 const Navbar = () => {
   const navigate = useNavigate();
   const [anchorEl, setAnchorEl] = useState<null | HTMLElement>(null);
-  const [isLoggedIn, setIsLoggedIn] = useState(false); // Replace with actual auth state
-  const [userType, setUserType] = useState<'candidate' | 'recruiter' | null>(null);
+  const { isAuthenticated, user, logout } = useAuth();
 
   const handleMenu = (event: React.MouseEvent<HTMLElement>) => {
     setAnchorEl(event.currentTarget);
@@ -27,8 +27,7 @@ const Navbar = () => {
   };
 
   const handleLogout = () => {
-    setIsLoggedIn(false);
-    setUserType(null);
+    logout();
     navigate('/');
     handleClose();
   };
@@ -45,7 +44,7 @@ const Navbar = () => {
           TalentConnect
         </Typography>
 
-        {!isLoggedIn ? (
+        {!isAuthenticated ? (
           <Box>
             <Button color="inherit" component={Link} to="/login">
               Login
@@ -83,7 +82,7 @@ const Navbar = () => {
             >
               <MenuItem
                 onClick={() => {
-                  navigate(`/${userType}/dashboard`);
+                  navigate(`/${user?.user_type}/dashboard`);
                   handleClose();
                 }}
               >

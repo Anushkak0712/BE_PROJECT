@@ -217,7 +217,8 @@ def apply_job(job_id):
             except Exception as e:
                 # Clean up video file if there's an error
                 if os.path.exists(filepath):
-                    os.remove(filepath)
+                    #os.remove(filepath)
+                    print(f"Video file {filepath} exists but was not deleted due to error: {str(e)}")
                 return jsonify({
                     "success": False,
                     "message": f"Error processing video {i+1}: {str(e)}"
@@ -340,6 +341,48 @@ def request_revaluation_route(application_id):
             return jsonify(result), 200
         else:
             return jsonify(result), 400
+            
+    except Exception as e:
+        return jsonify({
+            "success": False,
+            "message": f"Error processing request: {str(e)}"
+        }), 500
+
+@job_bp.route('/candidate/applications', methods=['GET'])
+@token_required
+def get_candidate_applications():
+    try:
+        token = request.headers.get('Authorization')[7:]  # Remove 'Bearer ' prefix
+        data = jwt.decode(
+            token,
+            os.getenv('JWT_SECRET_KEY', 'sgfsgfdhgfkjhhkjhyutyutruytguyr5646547658774edhfchgfhg'),
+            algorithms=['HS256']
+        )
+        
+        if data['user_type'] != 'candidate':
+            return jsonify({
+                "success": False,
+                "message": "Only candidates can view their applications"
+            }), 403
+            
+        db = get_database()
+        if db is None:
+            return jsonify({
+                "success": False,
+                "message": "Database connection failed"
+            }), 500
+            
+        applications_collection = db['applications']
+        applications = list(applications_collection.find({"candidate_id": data['email']}))
+        
+        # Convert ObjectId to string
+        for app in applications:
+            app['_id'] = str(app['_id'])
+            
+        return jsonify({
+            "success": True,
+            "applications": applications
+        }), 200
             
     except Exception as e:
         return jsonify({

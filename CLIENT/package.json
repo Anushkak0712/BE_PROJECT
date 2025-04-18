@@ -5,9 +5,10 @@
   "dependencies": {
     "@emotion/react": "^11.11.3",
     "@emotion/styled": "^11.11.0",
+    "@ffmpeg/core": "^0.12.10",
+    "@ffmpeg/ffmpeg": "^0.12.15",
     "@mui/icons-material": "^5.15.10",
     "@mui/material": "^5.15.10",
-    "@types/node": "^20.11.19",
     "@types/react": "^18.2.57",
     "@types/react-dom": "^18.2.19",
     "axios": "^1.6.7",
@@ -46,6 +47,7 @@
     ]
   },
   "devDependencies": {
+    "@types/node": "^22.14.1",
     "@types/styled-components": "^5.1.34"
   }
 }

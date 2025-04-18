@@ -1,4 +1,5 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
+import { useNavigate } from 'react-router-dom';
 import {
   Box,
   Grid,
@@ -16,16 +17,18 @@ import {
   TextField,
   Stack,
   Chip,
+  CircularProgress,
 } from '@mui/material';
 import {
   VideoCall,
   Person,
   Add,
   PlayArrow,
-  Schedule,
   CheckCircle,
 } from '@mui/icons-material';
 import { styled } from '@mui/material/styles';
+import { jobAPI } from '../../api/api';
+import { useAuth } from '../../context/AuthContext';
 
 const StyledPaper = styled(Paper)(({ theme }) => ({
   padding: theme.spacing(3),
@@ -40,44 +43,42 @@ const VideoPreview = styled('video')({
   borderRadius: '8px',
 });
 
+const navigatorWithGetUserMedia = navigator as Navigator & {
+  getUserMedia: (
+    constraints: MediaStreamConstraints,
+    successCallback: (stream: MediaStream) => void,
+    errorCallback: (error: Error) => void
+  ) => void;
+};
+
 const RecruiterDashboard = () => {
+  const navigate = useNavigate();
+  const { token } = useAuth();
   const [openDialog, setOpenDialog] = useState(false);
   const [selectedInterview, setSelectedInterview] = useState<any>(null);
+  const [jobs, setJobs] = useState<any[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
 
-  // Mock data - replace with actual API calls
-  const pendingReviews = [
-    {
-      id: 1,
-      candidate: 'John Doe',
-      position: 'Senior Developer',
-      submittedDate: '2024-04-10',
-      videoUrl: 'https://example.com/video1.mp4',
-    },
-    {
-      id: 2,
-      candidate: 'Jane Smith',
-      position: 'Full Stack Engineer',
-      submittedDate: '2024-04-11',
-      videoUrl: 'https://example.com/video2.mp4',
-    },
-  ];
+  useEffect(() => {
+    const fetchJobs = async () => {
+      try {
+        setLoading(true);
+        const response = await jobAPI.getJobs();
+        if (response.success) {
+          setJobs(response.jobs);
+        } else {
+          setError('Failed to fetch jobs');
+        }
+      } catch (err) {
+        setError('An error occurred while fetching jobs');
+      } finally {
+        setLoading(false);
+      }
+    };
 
-  const activePositions = [
-    {
-      id: 1,
-      title: 'Senior Developer',
-      department: 'Engineering',
-      candidates: 5,
-      pending: 2,
-    },
-    {
-      id: 2,
-      title: 'Full Stack Engineer',
-      department: 'Technology',
-      candidates: 3,
-      pending: 1,
-    },
-  ];
+    fetchJobs();
+  }, []);
 
   const handleOpenVideo = (interview: any) => {
     setSelectedInterview(interview);
@@ -94,6 +95,26 @@ const RecruiterDashboard = () => {
     handleCloseDialog();
   };
 
+  const handleAddPosition = () => {
+    navigate('/recruiter/job-posting');
+  };
+
+  if (loading) {
+    return (
+      <Box sx={{ display: 'flex', justifyContent: 'center', alignItems: 'center', minHeight: '60vh' }}>
+        <CircularProgress />
+      </Box>
+    );
+  }
+
+  if (error) {
+    return (
+      <Box sx={{ p: 3 }}>
+        <Typography color="error">{error}</Typography>
+      </Box>
+    );
+  }
+
   return (
     <Box sx={{ py: 4 }}>
       <Typography variant="h4" gutterBottom>
@@ -109,33 +130,42 @@ const RecruiterDashboard = () => {
               alignItems="center"
               mb={2}
             >
-              <Typography variant="h6">Pending Reviews</Typography>
-              <Chip
-                label={`${pendingReviews.length} pending`}
-                color="primary"
-                size="small"
-              />
+              <Typography variant="h6">Active Positions</Typography>
+              <Button 
+                startIcon={<Add />} 
+                variant="contained"
+                onClick={handleAddPosition}
+              >
+                Add Position
+              </Button>
             </Stack>
             <List>
-              {pendingReviews.map((interview) => (
-                <ListItem
-                  key={interview.id}
+              {jobs.map((job) => (
+                <ListItem 
+                  key={job._id}
                   secondaryAction={
                     <Button
-                      variant="contained"
-                      startIcon={<PlayArrow />}
-                      onClick={() => handleOpenVideo(interview)}
+                      variant="outlined"
+                      onClick={() => navigate(`/recruiter/jobs/${job._id}/applications`)}
                     >
-                      Review
+                      View Applications
                     </Button>
                   }
                 >
                   <ListItemIcon>
-                    <Person />
+                    <VideoCall />
                   </ListItemIcon>
                   <ListItemText
-                    primary={`${interview.candidate} - ${interview.position}`}
-                    secondary={`Submitted: ${interview.submittedDate}`}
+                    primary={job.title}
+                    secondary={
+                      <>
+                        Company: {job.company_name}
+                        <br />
+                        Location: {job.location}
+                        <br />
+                        Type: {job.job_type}
+                      </>
+                    }
                   />
                 </ListItem>
               ))}
@@ -151,30 +181,38 @@ const RecruiterDashboard = () => {
               alignItems="center"
               mb={2}
             >
-              <Typography variant="h6">Active Positions</Typography>
-              <Button startIcon={<Add />} variant="contained">
-                Add Position
-              </Button>
+              <Typography variant="h6">Recent Applications</Typography>
+              <Chip
+                label={`${jobs.reduce((acc, job) => acc + (job.applications?.length || 0), 0)} total`}
+                color="primary"
+                size="small"
+              />
             </Stack>
             <List>
-              {activePositions.map((position) => (
-                <ListItem key={position.id}>
-                  <ListItemIcon>
-                    <VideoCall />
-                  </ListItemIcon>
-                  <ListItemText
-                    primary={position.title}
-                    secondary={
-                      <>
-                        Department: {position.department}
-                        <br />
-                        Candidates: {position.candidates} (
-                        {position.pending} pending)
-                      </>
+              {jobs.flatMap(job => 
+                (job.applications || []).map((application: any) => (
+                  <ListItem
+                    key={application._id}
+                    secondaryAction={
+                      <Button
+                        variant="contained"
+                        startIcon={<PlayArrow />}
+                        onClick={() => handleOpenVideo(application)}
+                      >
+                        Review
+                      </Button>
                     }
-                  />
-                </ListItem>
-              ))}
+                  >
+                    <ListItemIcon>
+                      <Person />
+                    </ListItemIcon>
+                    <ListItemText
+                      primary={`${application.candidate_name} - ${job.title}`}
+                      secondary={`Submitted: ${new Date(application.created_at).toLocaleDateString()}`}
+                    />
+                  </ListItem>
+                ))
+              )}
             </List>
           </StyledPaper>
         </Grid>
@@ -192,14 +230,14 @@ const RecruiterDashboard = () => {
             <Stack spacing={3}>
               <Box>
                 <Typography variant="subtitle1" gutterBottom>
-                  Candidate: {selectedInterview.candidate}
+                  Candidate: {selectedInterview.candidate_name}
                 </Typography>
                 <Typography variant="subtitle2" color="text.secondary">
-                  Position: {selectedInterview.position}
+                  Position: {selectedInterview.job_title}
                 </Typography>
               </Box>
               <VideoPreview controls>
-                <source src={selectedInterview.videoUrl} type="video/mp4" />
+                <source src={selectedInterview.video_url} type="video/mp4" />
                 Your browser does not support the video tag.
               </VideoPreview>
               <TextField

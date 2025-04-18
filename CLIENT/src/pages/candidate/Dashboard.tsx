@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useState, useEffect } from 'react';
 import {
   Box,
   Grid,
@@ -11,6 +11,7 @@ import {
   Button,
   Chip,
   Divider,
+  CircularProgress,
 } from '@mui/material';
 import {
   VideoCall,
@@ -21,6 +22,8 @@ import {
 } from '@mui/icons-material';
 import { useNavigate } from 'react-router-dom';
 import { styled } from '@mui/material/styles';
+import { jobAPI } from '../../api/api';
+import { useAuth } from '../../context/AuthContext';
 
 const StyledPaper = styled(Paper)(({ theme }) => ({
   padding: theme.spacing(3),
@@ -35,35 +38,37 @@ const StatusChip = styled(Chip)(({ theme }) => ({
 
 const CandidateDashboard = () => {
   const navigate = useNavigate();
+  const { token } = useAuth();
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+  const [jobs, setJobs] = useState<any[]>([]);
+  const [applications, setApplications] = useState<any[]>([]);
 
-  // Mock data - replace with actual API calls
-  const upcomingInterviews = [
-    {
-      id: 1,
-      company: 'Tech Corp',
-      position: 'Senior Developer',
-      deadline: '2024-04-20',
-      status: 'pending',
-    },
-    {
-      id: 2,
-      company: 'Innovation Labs',
-      position: 'Full Stack Engineer',
-      deadline: '2024-04-25',
-      status: 'not_started',
-    },
-  ];
+  useEffect(() => {
+    const fetchData = async () => {
+      try {
+        setLoading(true);
+        const [jobsResponse, applicationsResponse] = await Promise.all([
+          jobAPI.getJobs(),
+          jobAPI.getCandidateApplications(token!)
+        ]);
 
-  const completedInterviews = [
-    {
-      id: 3,
-      company: 'Digital Solutions',
-      position: 'Frontend Developer',
-      completedDate: '2024-04-01',
-      status: 'completed',
-      feedback: 'Under review',
-    },
-  ];
+        if (jobsResponse.success) {
+          setJobs(jobsResponse.jobs);
+        }
+
+        if (applicationsResponse.success) {
+          setApplications(applicationsResponse.applications);
+        }
+      } catch (err) {
+        setError('Failed to fetch data');
+      } finally {
+        setLoading(false);
+      }
+    };
+
+    fetchData();
+  }, [token]);
 
   const getStatusChip = (status: string) => {
     switch (status) {
@@ -106,6 +111,22 @@ const CandidateDashboard = () => {
     }
   };
 
+  if (loading) {
+    return (
+      <Box sx={{ display: 'flex', justifyContent: 'center', alignItems: 'center', minHeight: '60vh' }}>
+        <CircularProgress />
+      </Box>
+    );
+  }
+
+  if (error) {
+    return (
+      <Box sx={{ p: 3 }}>
+        <Typography color="error">{error}</Typography>
+      </Box>
+    );
+  }
+
   return (
     <Box sx={{ py: 4 }}>
       <Typography variant="h4" gutterBottom>
@@ -116,19 +137,19 @@ const CandidateDashboard = () => {
         <Grid item xs={12} md={6}>
           <StyledPaper elevation={3}>
             <Typography variant="h6" gutterBottom>
-              Upcoming Interviews
+              Available Positions
             </Typography>
             <List>
-              {upcomingInterviews.map((interview) => (
-                <React.Fragment key={interview.id}>
+              {jobs.map((job) => (
+                <React.Fragment key={job._id}>
                   <ListItem
                     secondaryAction={
                       <Button
                         variant="contained"
                         startIcon={<VideoCall />}
-                        onClick={() => navigate(`/interview/${interview.id}`)}
+                        onClick={() => navigate(`/candidate/jobs/${job._id}/apply`)}
                       >
-                        Start Interview
+                        Apply Now
                       </Button>
                     }
                   >
@@ -138,11 +159,21 @@ const CandidateDashboard = () => {
                     <ListItemText
                       primary={
                         <>
-                          {interview.position} at {interview.company}
-                          {getStatusChip(interview.status)}
+                          {job.title} at {job.company_name}
+                          <StatusChip
+                            label={job.job_type}
+                            color="primary"
+                            size="small"
+                          />
                         </>
                       }
-                      secondary={`Deadline: ${interview.deadline}`}
+                      secondary={
+                        <>
+                          Location: {job.location}
+                          <br />
+                          Posted: {new Date(job.created_at).toLocaleDateString()}
+                        </>
+                      }
                     />
                   </ListItem>
                   <Divider />
@@ -155,34 +186,37 @@ const CandidateDashboard = () => {
         <Grid item xs={12} md={6}>
           <StyledPaper elevation={3}>
             <Typography variant="h6" gutterBottom>
-              Completed Interviews
+              Your Applications
             </Typography>
             <List>
-              {completedInterviews.map((interview) => (
-                <React.Fragment key={interview.id}>
-                  <ListItem>
-                    <ListItemIcon>
-                      <CheckCircle />
-                    </ListItemIcon>
-                    <ListItemText
-                      primary={
-                        <>
-                          {interview.position} at {interview.company}
-                          {getStatusChip(interview.status)}
-                        </>
-                      }
-                      secondary={
-                        <>
-                          Completed on: {interview.completedDate}
-                          <br />
-                          Status: {interview.feedback}
-                        </>
-                      }
-                    />
-                  </ListItem>
-                  <Divider />
-                </React.Fragment>
-              ))}
+              {applications.map((application) => {
+                const job = jobs.find(j => j._id === application.job_id);
+                return (
+                  <React.Fragment key={application._id}>
+                    <ListItem>
+                      <ListItemIcon>
+                        <CheckCircle />
+                      </ListItemIcon>
+                      <ListItemText
+                        primary={
+                          <>
+                            {job?.title} at {job?.company_name}
+                            {getStatusChip(application.status)}
+                          </>
+                        }
+                        secondary={
+                          <>
+                            Applied on: {new Date(application.created_at).toLocaleDateString()}
+                            <br />
+                            Status: {application.status}
+                          </>
+                        }
+                      />
+                    </ListItem>
+                    <Divider />
+                  </React.Fragment>
+                );
+              })}
             </List>
           </StyledPaper>
         </Grid>

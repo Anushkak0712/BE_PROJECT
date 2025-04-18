@@ -11,13 +11,19 @@ logging.basicConfig(level=logging.DEBUG)
 logger = logging.getLogger(__name__)
 
 app = Flask(__name__)
-# Enable CORS
-CORS(app)
+# Enable CORS with specific configuration
+CORS(app, resources={
+    r"/api/*": {
+        "origins": "*",
+        "methods": ["GET", "POST", "PUT", "DELETE", "OPTIONS"],
+        "allow_headers": ["Content-Type", "Authorization"]
+    }
+})
 
 UPLOAD_FOLDER = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'uploads')
 os.makedirs(UPLOAD_FOLDER, exist_ok=True)
 
-# Register blueprints
+# Register blueprints with /api prefix
 app.register_blueprint(user_bp, url_prefix='/api')
 app.register_blueprint(job_bp, url_prefix='/api')
 logger.info("Blueprints registered with prefix '/api'")
@@ -43,7 +49,8 @@ def predict():
         return jsonify({'error': str(e)}), 500
     finally:
         if os.path.exists(filepath):
-            os.remove(filepath)
+            #os.remove(filepath)
+            print(f"Video file {filepath} exists but was not deleted due to error: {str(e)}")
 
 if __name__ == '__main__':
     logger.info("Starting Flask application...")

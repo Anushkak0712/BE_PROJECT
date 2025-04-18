@@ -23,8 +23,7 @@ import { styled } from '@mui/material/styles';
 import { useFormik } from 'formik';
 import * as Yup from 'yup';
 import { Visibility, VisibilityOff } from '@mui/icons-material';
-import { userUtils } from '../utils/userUtils';
-import { authApi } from '../api/auth';
+import { authAPI } from '../api/api';
 
 const StyledPaper = styled(Paper)(({ theme }) => ({
   padding: theme.spacing(4),
@@ -79,25 +78,32 @@ const Register = () => {
     onSubmit: async (values) => {
       try {
         setError(null);
-        const registerFn = values.userType === 'recruiter'
-          ? authApi.registerRecruiter
-          : authApi.registerCandidate;
-
-        const result = await registerFn({
+        const commonData = {
           username: `${values.firstName} ${values.lastName}`,
           email: values.email,
           password: values.password,
-          ...(values.userType === 'recruiter' ? {
-            company_name: values.company,
-            position: 'Recruiter'
-          } : {
-            skills: []
-          })
-        });
+        };
 
-        if (result.success) {
-          navigate('/login');
+        if (values.userType === 'recruiter') {
+          if (!values.company) {
+            setError('Company name is required for recruiters');
+            return;
+          }
+          const recruiterData = {
+            ...commonData,
+            company_name: values.company,
+            position: 'Recruiter',
+          };
+          await authAPI.registerRecruiter(recruiterData);
+        } else {
+          const candidateData = {
+            ...commonData,
+            skills: [],
+          };
+          await authAPI.registerCandidate(candidateData);
         }
+
+        navigate('/login');
       } catch (err) {
         setError(err instanceof Error ? err.message : 'Registration failed');
       }
