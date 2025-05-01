@@ -1,4 +1,5 @@
 import axios from 'axios';
+import { API_BASE_URL, getAuthToken } from './config';
 
 const API_URL = 'http://localhost:5000/api';
 
@@ -8,6 +9,7 @@ export const authAPI = {
     const response = await axios.post(`${API_URL}/login`, { email, password });
     return response.data;
   },
+
   registerRecruiter: async (data: {
     username: string;
     email: string;
@@ -18,6 +20,7 @@ export const authAPI = {
     const response = await axios.post(`${API_URL}/register/recruiter`, data);
     return response.data;
   },
+
   registerCandidate: async (data: {
     username: string;
     email: string;
@@ -27,17 +30,23 @@ export const authAPI = {
     const response = await axios.post(`${API_URL}/register/candidate`, data);
     return response.data;
   },
+
+  getProfile: async (token: string) => {
+    const response = await axios.get(`${API_URL}/profile`, {
+      headers: { Authorization: `Bearer ${token}` }
+    });
+    return response.data;
+  },
+
   requestPasswordReset: async (email: string) => {
     const response = await axios.post(`${API_URL}/request-password-reset`, { email });
     return response.data;
   },
+
   resetPassword: async (token: string, newPassword: string) => {
-    const response = await axios.post(`${API_URL}/reset-password`, { token, new_password: newPassword });
-    return response.data;
-  },
-  getProfile: async (token: string) => {
-    const response = await axios.get(`${API_URL}/profile`, {
-      headers: { Authorization: `Bearer ${token}` }
+    const response = await axios.post(`${API_URL}/reset-password`, {
+      token,
+      new_password: newPassword
     });
     return response.data;
   }
@@ -65,6 +74,7 @@ export const jobAPI = {
     location?: string;
     job_type?: string;
     company_name?: string;
+    recruiter_id?: string;
   }) => {
     const response = await axios.get(`${API_URL}/jobs`, { params: filters });
     return response.data;
@@ -84,23 +94,33 @@ export const jobAPI = {
     return response.data;
   },
 
-  applyJob: async (token: string, jobId: string, videos: File[]) => {
-    const formData = new FormData();
-    videos.forEach((video, index) => {
-      formData.append(`video_${index}`, video);
-    });
+  applyForJob: async (jobId: string, videos: File[], token: string) => {
+    try {
+      const formData = new FormData();
+      
+      // Use unique field names but preserve original filenames
+      videos.forEach((video, index) => {
+        formData.append(`video_${index}`, video, video.name);  // Keep video_${index} as field name but use original filename
+      });
 
-    const response = await axios.post(
-      `${API_URL}/jobs/${jobId}/apply`,
-      formData,
-      {
-        headers: {
-          Authorization: `Bearer ${token}`,
-          'Content-Type': 'multipart/form-data'
+      const response = await axios.post(
+        `${API_URL}/jobs/${jobId}/apply`,
+        formData,
+        {
+          headers: {
+            'Content-Type': 'multipart/form-data',
+            'Authorization': `Bearer ${token}`
+          }
         }
+      );
+      return response.data;
+    } catch (error: any) {
+      console.error('Error in applyForJob:', error);
+      if (error.response?.status === 401) {
+        throw new Error('Invalid or expired token. Please log in again.');
       }
-    );
-    return response.data;
+      throw new Error(error.response?.data?.message || 'Failed to submit application');
+    }
   },
 
   getJobApplications: async (token: string, jobId: string, filters?: {

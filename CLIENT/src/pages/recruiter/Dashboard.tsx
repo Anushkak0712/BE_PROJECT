@@ -29,6 +29,7 @@ import {
 import { styled } from '@mui/material/styles';
 import { jobAPI } from '../../api/api';
 import { useAuth } from '../../context/AuthContext';
+import {jwtDecode} from 'jwt-decode';
 
 const StyledPaper = styled(Paper)(({ theme }) => ({
   padding: theme.spacing(3),
@@ -64,7 +65,10 @@ const RecruiterDashboard = () => {
     const fetchJobs = async () => {
       try {
         setLoading(true);
-        const response = await jobAPI.getJobs();
+        const decodedToken = jwtDecode(token as string);
+        const response = await jobAPI.getJobs({
+          recruiter_id: token ? (decodedToken as { email: string }).email : ''
+        });
         if (response.success) {
           setJobs(response.jobs);
         } else {

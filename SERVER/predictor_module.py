@@ -14,7 +14,7 @@ import tensorflow as tf
 tokenizer = BertTokenizer.from_pretrained('bert-base-uncased')
 bert_model = BertModel.from_pretrained('bert-base-uncased')
 whisper_model = whisper.load_model("base.en")
-predictor = tf.keras.models.load_model('./first_impressions_model2.keras', safe_mode=False)
+predictor = tf.keras.models.load_model('first_impressions_model2.keras', safe_mode=False)
 
 
 def extract_audio_from_video(file_path: str) -> np.ndarray:
@@ -23,35 +23,60 @@ def extract_audio_from_video(file_path: str) -> np.ndarray:
     raw = out.run(capture_stdout=True, capture_stderr=True)
     return np.frombuffer(raw[0], np.float32)
 
-def preprocess_audio_series(raw_data: np.ndarray) -> np.ndarray:
-    N, M = 24, 1319
-    mfcc_data = librosa.feature.mfcc(y=raw_data, sr=44100, n_mfcc=24)
-    mfcc_data_standardized = (mfcc_data - np.mean(mfcc_data)) / np.std(mfcc_data)
-    padding = np.zeros((N, M - mfcc_data_standardized.shape[1]))
-    padded_data = np.hstack((padding, mfcc_data_standardized))
-    return padded_data.reshape(N, M, 1)
+# def preprocess_audio_series(audio_raw):
+#     # Check initial shape
+#     print(f"Original audio shape: {audio_raw.shape}")
+
+#     if audio_raw.shape[0] <= 0:
+#         raise ValueError("Audio data has no samples!")
+
+#     # If reshaping is needed
+#     audio_raw = np.reshape(audio_raw, (24, 1319, 1))  # Example, adjust if needed
+
+#     print(f"Processed audio shape: {audio_raw.shape}")
+
+#     return audio_raw
+def preprocess_audio_series(audio_raw):
+    print(f"Original audio shape: {audio_raw.shape}")
+
+    # Ensure the number of elements is divisible by 24 * 1319 (31656)
+    target_size = 24 * 1319  # This is the required number of elements
+
+    # If the size of the audio is greater than required, truncate
+    if audio_raw.size > target_size:
+        audio_raw = audio_raw[:target_size]
+    # If the size is smaller, pad with zeros
+    elif audio_raw.size < target_size:
+        padding = target_size - audio_raw.size
+        audio_raw = np.pad(audio_raw, (0, padding), 'constant')
+
+    # Now reshape to (24, 1319, 1)
+    audio_raw = np.reshape(audio_raw, (24, 1319, 1))
+
+    print(f"Processed audio shape: {audio_raw.shape}")
+    return audio_raw
 
 def get_number_of_frames(file_path: str) -> int:
     try:
         # Check if file exists and is readable
         if not os.path.exists(file_path):
             raise ValueError("Video file does not exist")
-            
+
         # Get file size
         file_size = os.path.getsize(file_path)
         if file_size == 0:
             raise ValueError("Video file is empty")
-            
+
         # Use OpenCV to get actual frame count and properties
         cap = cv2.VideoCapture(file_path)
         if not cap.isOpened():
             raise ValueError("Could not open video file")
-            
+
         # Get video properties
         total_frames = int(cap.get(cv2.CAP_PROP_FRAME_COUNT))
         fps = cap.get(cv2.CAP_PROP_FPS)
         duration = total_frames / fps if fps > 0 else 0
-        
+
         # If we couldn't get frame count directly, try to count frames
         if total_frames <= 0:
             print("Could not get frame count directly, counting frames...")
@@ -64,15 +89,15 @@ def get_number_of_frames(file_path: str) -> int:
             duration = total_frames / fps if fps > 0 else 0
             # Reset video capture
             cap.set(cv2.CAP_PROP_POS_FRAMES, 0)
-        
+
         print(f"Video properties - Duration: {duration:.2f}s, FPS: {fps:.2f}, Total frames: {total_frames}")
-        
+
         if total_frames <= 0:
             raise ValueError("Could not determine number of frames in video")
-            
+
         cap.release()
         return total_frames
-        
+
     except Exception as e:
         print(f"Error details: {str(e)}")
         raise ValueError(f"Error processing video file: {str(e)}")
@@ -82,12 +107,12 @@ def extract_N_video_frames(file_path: str, number_of_samples: int = 6) -> List[n
         cap = cv2.VideoCapture(file_path)
         if not cap.isOpened():
             raise ValueError("Could not open video file")
-            
+
         # Get video properties
         total_frames = int(cap.get(cv2.CAP_PROP_FRAME_COUNT))
         fps = cap.get(cv2.CAP_PROP_FPS)
         duration = total_frames / fps if fps > 0 else 0
-        
+
         # If we couldn't get frame count directly, count frames
         if total_frames <= 0:
             print("Could not get frame count directly, counting frames...")
@@ -103,28 +128,28 @@ def extract_N_video_frames(file_path: str, number_of_samples: int = 6) -> List[n
             print(f"Counted {total_frames} frames at positions: {frame_positions}")
             # Reset video capture
             cap.set(cv2.CAP_PROP_POS_FRAMES, 0)
-        
+
         print(f"Video properties - Duration: {duration:.2f}s, FPS: {fps:.2f}, Total frames: {total_frames}")
-        
+
         if total_frames < number_of_samples:
             raise ValueError(f"Video is too short. Expected at least {number_of_samples} frames, got {total_frames}")
-            
+
         video_frames = []
         sample_size = min(number_of_samples, total_frames)
-        
+
         # Instead of using frame indices, sample at specific time points
         time_points = [duration * i / (sample_size - 1) for i in range(sample_size)]
         print(f"Sampling at time points: {time_points}")
-        
+
         for time_point in time_points:
             # Convert time to frame position
             frame_pos = int(time_point * fps)
             print(f"Attempting to read frame at time {time_point:.2f}s (position {frame_pos})")
-            
+
             # Try to read the frame
             cap.set(cv2.CAP_PROP_POS_FRAMES, frame_pos)
             res, frame = cap.read()
-            
+
             if not res:
                 print(f"Warning: Could not read frame at position {frame_pos}")
                 # Try reading frames sequentially until we get a valid one
@@ -136,12 +161,12 @@ def extract_N_video_frames(file_path: str, number_of_samples: int = 6) -> List[n
                     if res:
                         print(f"Successfully read frame at offset {offset}")
                         break
-                        
+
                 if not res:
                     raise ValueError(f"Could not read any frames near position {frame_pos}")
-                    
+
             video_frames.append(cv2.cvtColor(frame, cv2.COLOR_BGR2RGB))
-            
+
         cap.release()
         return video_frames
     except Exception as e:
@@ -169,20 +194,20 @@ def predict_personality(file_path: str) -> Dict[str, float]:
         # Validate file exists and is readable
         if not os.path.exists(file_path):
             raise ValueError("Video file does not exist")
-            
+
         # Get file size
         file_size = os.path.getsize(file_path)
         if file_size == 0:
             raise ValueError("Video file is empty")
-            
+
         transcription = whisper_model.transcribe(file_path)['text']
         print(f"Transcription: {transcription}")
         print(f"Predicting personality for file: {file_path}")
-        
+
         # Audio
         audio_raw = extract_audio_from_video(file_path)
         audio_input = preprocess_audio_series(audio_raw)
-        
+
         # Video
         sampled = extract_N_video_frames(file_path, number_of_samples=6)
         resized_images = [resize_image(im, (248, 140)) for im in sampled]

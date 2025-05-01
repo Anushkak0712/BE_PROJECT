@@ -12,8 +12,11 @@ from routes.user_routes import token_required
 from database import get_database
 import jwt
 import os
-from predictor_module import predict_personality
+from datetime import datetime
 import uuid
+import cv2
+import random
+from predictor_module import predict_personality
 
 job_bp = Blueprint('job', __name__)
 # Get the absolute path to the uploads directory
@@ -90,6 +93,8 @@ def get_jobs():
             filters['job_type'] = request.args['job_type']
         if 'company_name' in request.args:
             filters['company_name'] = request.args['company_name']
+        if 'recruiter_id' in request.args:
+            filters['recruiter_id'] = request.args['recruiter_id']
             
         jobs = get_job_postings(filters)
         return jsonify({
@@ -136,36 +141,35 @@ def save_job_route(job_id):
 @job_bp.route('/jobs/<job_id>/apply', methods=['POST'])
 @token_required
 def apply_job(job_id):
+    filepath = None
+    print('request-------->')
     try:
-        token = request.headers.get('Authorization')[7:]  # Remove 'Bearer ' prefix
+        # Get database connection
+        db = get_database()
+
+
+        # Get user email from token
+        token = request.headers.get('Authorization').split(' ')[1]
         data = jwt.decode(
             token,
             os.getenv('JWT_SECRET_KEY', 'sgfsgfdhgfkjhhkjhyutyutruytguyr5646547658774edhfchgfhg'),
             algorithms=['HS256']
         )
-        
-        if data['user_type'] != 'candidate':
+        email = data['email']
+
+        if not os.path.exists(UPLOAD_FOLDER):
+            os.makedirs(UPLOAD_FOLDER)
+
+        video_files = [file for key, file in request.files.items() if key.startswith('video_')]
+        num_questions = len(video_files)
+        print('files-------->',video_files)
+
+        if num_questions == 0:
             return jsonify({
                 "success": False,
-                "message": "Only candidates can apply for jobs"
-            }), 403
-            
-        # Get job details to know how many questions to expect
-        db = get_database()
-        if db is None:
-            return jsonify({
-                "success": False,
-                "message": "Database connection failed"
-            }), 500
-            
-        job = db['jobs'].find_one({"_id": job_id})
-        if not job:
-            return jsonify({
-                "success": False,
-                "message": "Job not found"
-            }), 404
-            
-        num_questions = len(job['questions'])
+                "message": "No videos provided"
+            }), 400
+
         answers = []
         total_scores = {
             "extraversion": 0,
@@ -174,34 +178,70 @@ def apply_job(job_id):
             "conscientiousness": 0,
             "openness": 0
         }
-        
+
+        # Predefined scores for specific filenames
+    #     predefined_scores = {
+    #         "video1.mp4": {
+    #             'extraversion': 1.010462760925293,
+    #             'neuroticism': -13.511393547058105,
+    #             'agreeableness': -11.11119270324707,
+    #             'conscientiousness': 16.780467987060547,
+    #             'openness': -0.36275890469551086
+    #             },
+    #         "video2.mp4": {
+    #             'extraversion': -0.340932697057724,
+    #             'neuroticism': -1.0145142078399658,
+    #             'agreeableness': 1.6222896575927734,
+    #             'conscientiousness': -0.23875777423381805,
+    #             'openness': 1.057740330696106
+    #             },
+    #         "video3.mp4": {
+    #                 'extraversion': 0.2852325439453125,
+    # 'neuroticism': 0.4350805878639221,
+    # 'agreeableness': 0.4812329113483429,
+    # 'conscientiousness': 0.5682945251464844,
+    # 'openness': 0.41324323415756226},
+    #         "video4.mp4": {
+    #             "extraversion": 0.5,
+    #             "neuroticism": 0.6,
+    #             "agreeableness": 0.65,
+    #             "conscientiousness": 0.7,
+    #             "openness": 0.9
+    #         },
+    #         "video5.mp4": {
+    #             "extraversion": 0.4,
+    #             "neuroticism": 0.7,
+    #             "agreeableness": 0.55,
+    #             "conscientiousness": 0.6,
+    #             "openness": 0.85
+    #         }
+    #     }
+
         # Process each video answer
-        for i in range(num_questions):
-            video_key = f'video_{i}'
-            if video_key not in request.files:
-                return jsonify({
-                    "success": False,
-                    "message": f"Missing video for question {i+1}"
-                }), 400
-                
-            video = request.files[video_key]
-            if video.filename == '':
-                return jsonify({
-                    "success": False,
-                    "message": f"No selected file for question {i+1}"
-                }), 400
-                
-            # Generate unique filename
-            unique_filename = f"{job_id}_{data['email']}_{i}_{uuid.uuid4()}.mp4"
-            filepath = os.path.join(UPLOAD_FOLDER, unique_filename)
-            
-            # Save video
-            video.save(filepath)
-            
+        for i, video in enumerate(video_files):
             try:
-                # Get personality scores from model
-                scores = predict_personality(filepath)
+                # Save video with its original filename
+                original_filename = video.filename
+                print('video-------->',video)
+                filepath = os.path.join(UPLOAD_FOLDER, original_filename)
                 
+                # Save the video
+                video.save(filepath)
+
+                # Generate scores based on filename
+                # if original_filename in predefined_scores:
+                #     scores = predefined_scores[original_filename]
+                # else:
+                #     scores = {
+                #         "extraversion": round(random.uniform(0.3, 0.9), 2),
+                #         "neuroticism": round(random.uniform(0.3, 0.9), 2),
+                #         "agreeableness": round(random.uniform(0.3, 0.9), 2),
+                #         "conscientiousness": round(random.uniform(0.3, 0.9), 2),
+                #         "openness": round(random.uniform(0.3, 0.9), 2)
+                #     }
+                scores=predict_personality(filepath)
+                print('scores-------->',scores)
+
                 # Add to total scores
                 for trait in total_scores:
                     if trait in scores:
@@ -210,37 +250,59 @@ def apply_job(job_id):
                 # Store answer with video URL and scores
                 answers.append({
                     "question_index": i,
-                    "video_url": f"/api/videos/{unique_filename}",
+                    "video_url": f"/api/videos/{original_filename}",
                     "personality_scores": scores
                 })
                 
             except Exception as e:
-                # Clean up video file if there's an error
-                if os.path.exists(filepath):
-                    #os.remove(filepath)
-                    print(f"Video file {filepath} exists but was not deleted due to error: {str(e)}")
+                if filepath and os.path.exists(filepath):
+                    os.remove(filepath)
                 return jsonify({
                     "success": False,
                     "message": f"Error processing video {i+1}: {str(e)}"
                 }), 500
-        
+
         # Calculate average scores
-        average_scores = {}
-        for trait in total_scores:
-            average_scores[trait] = round(total_scores[trait] / num_questions, 4)
-        
-        # Submit application with processed answers
-        result = submit_application(job_id, data['email'], answers, average_scores)
-        
-        if result["success"]:
-            return jsonify(result), 201
-        else:
-            return jsonify(result), 400
-            
+        num_answers = len(answers)
+        average_scores = {
+            trait: round(score / num_answers, 2)
+            for trait, score in total_scores.items()
+        }
+
+        # Create application document
+        application = {
+            "job_id": job_id,
+            "candidate_id": email,
+            "answers": answers,
+            "average_scores": average_scores,
+            "status": "pending",
+            "created_at": datetime.utcnow(),
+            "updated_at": datetime.utcnow()
+        }
+
+        # Insert application into database
+        applications_collection = db['applications']
+        result = applications_collection.insert_one(application)
+
+        if not result.inserted_id:
+            return jsonify({
+                "success": False,
+                "message": "Failed to save application"
+            }), 500
+
+        return jsonify({
+            "success": True,
+            "message": "Application submitted successfully",
+            "application_id": str(result.inserted_id),
+            "answers": answers,
+            "average_scores": average_scores
+        }), 200
+
     except Exception as e:
+        print(f"Application error: {str(e)}")
         return jsonify({
             "success": False,
-            "message": f"Error processing request: {str(e)}"
+            "message": f"Error processing application: {str(e)}"
         }), 500
 
 @job_bp.route('/jobs/<job_id>/applications', methods=['GET'])
@@ -374,7 +436,7 @@ def get_candidate_applications():
             
         applications_collection = db['applications']
         applications = list(applications_collection.find({"candidate_id": data['email']}))
-        
+        print(data)
         # Convert ObjectId to string
         for app in applications:
             app['_id'] = str(app['_id'])

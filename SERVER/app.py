@@ -47,10 +47,7 @@ def predict():
     except Exception as e:
         logger.error(f"Error during prediction: {e}")
         return jsonify({'error': str(e)}), 500
-    finally:
-        if os.path.exists(filepath):
-            #os.remove(filepath)
-            print(f"Video file {filepath} exists but was not deleted due to error: {str(e)}")
+
 
 if __name__ == '__main__':
     logger.info("Starting Flask application...")

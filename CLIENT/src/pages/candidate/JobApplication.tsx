@@ -29,9 +29,10 @@ const StyledPaper = styled(Paper)(({ theme }) => ({
 
 const VideoPreview = styled('video')({
   width: '100%',
-  maxHeight: '400px',
+  height: '480px',
   borderRadius: '8px',
   backgroundColor: '#000',
+  objectFit: 'contain'
 });
 
 const JobApplication: React.FC = () => {
@@ -53,6 +54,13 @@ const JobApplication: React.FC = () => {
 
   const { token } = useAuth();
   const navigate = useNavigate();
+
+  useEffect(() => {
+    if (!token) {
+      setError('You must be logged in to submit an application');
+      navigate('/login', { state: { from: `/candidate/jobs/${jobId}/apply` } });
+    }
+  }, [token, navigate, jobId]);
 
   useEffect(() => {
     const fetchJob = async () => {
@@ -81,14 +89,21 @@ const JobApplication: React.FC = () => {
   const startRecording = (index: number) => {
     try {
       if (navigator.mediaDevices && navigator.mediaDevices.getUserMedia) {
-        navigator.mediaDevices.getUserMedia({ 
-          video: { 
-            width: { ideal: 1280 },
-            height: { ideal: 720 },
+        // Set fixed dimensions for consistency
+        const constraints = {
+          video: {
+            width: { exact: 640 },  // Force exact width
+            height: { exact: 480 }, // Force exact height
             facingMode: "user"
-          }, 
-          audio: true 
-        })
+          },
+          audio: {
+            echoCancellation: true,
+            noiseSuppression: true,
+            sampleRate: 44100
+          }
+        };
+
+        navigator.mediaDevices.getUserMedia(constraints)
           .then(stream => {
             const video = videoRefs.current[index];
             if (video) {
@@ -96,37 +111,18 @@ const JobApplication: React.FC = () => {
               video.play();
             }
 
-            // Store the stream
             setStreams(prev => {
               const newStreams = [...prev];
               newStreams[index] = stream;
               return newStreams;
             });
 
-            // Try different MIME types in order of preference
-            const mimeTypes = [
-              'video/mp4;codecs=h264,aac',
-              'video/webm;codecs=h264,opus',
-              'video/webm;codecs=vp9,opus',
-              'video/webm'
-            ];
-
-            let selectedMimeType = '';
-            for (const mimeType of mimeTypes) {
-              if (MediaRecorder.isTypeSupported(mimeType)) {
-                selectedMimeType = mimeType;
-                break;
-              }
-            }
-
-            if (!selectedMimeType) {
-              throw new Error('No supported MIME type found');
-            }
-
+            // Use fixed settings for MediaRecorder
             const mediaRecorder = new MediaRecorder(stream, {
-              mimeType: selectedMimeType,
-              videoBitsPerSecond: 2500000 // 2.5 Mbps
+              mimeType: 'video/webm;codecs=vp8', // Specify codec
+              videoBitsPerSecond: 1000000 // 1 Mbps
             });
+
             mediaRecorderRefs.current[index] = mediaRecorder;
             chunksRefs.current[index] = [];
 
@@ -137,124 +133,52 @@ const JobApplication: React.FC = () => {
             };
 
             mediaRecorder.onstop = () => {
-              const blob = new Blob(chunksRefs.current[index], { type: selectedMimeType });
-              const videoUrl = URL.createObjectURL(blob);
-              
-              // Store the video URL for preview
-              setRecordedVideos(prev => {
-                const newVideos = [...prev];
-                newVideos[index] = videoUrl;
-                return newVideos;
+              const blob = new Blob(chunksRefs.current[index], { 
+                type: 'video/webm;codecs=vp8' 
               });
+              
+              // Verify video dimensions before saving
+              const tempVideo = document.createElement('video');
+              tempVideo.src = URL.createObjectURL(blob);
+              
+              tempVideo.onloadedmetadata = () => {
+                console.log(`Video dimensions: ${tempVideo.videoWidth}x${tempVideo.videoHeight}`);
+                
+                if (tempVideo.videoWidth > 0 && tempVideo.videoHeight > 0) {
+                  const videoUrl = URL.createObjectURL(blob);
+                  setRecordedVideos(prev => {
+                    const newVideos = [...prev];
+                    newVideos[index] = videoUrl;
+                    return newVideos;
+                  });
 
-              // Create a File object with the correct extension based on MIME type
-              const extension = selectedMimeType.includes('mp4') ? 'mp4' : 'webm';
-              const videoFile = new File([blob], `answer_${index}.${extension}`, { type: selectedMimeType });
-              
-              // Store the video file for submission
-              setVideos(prev => {
-                const newVideos = [...prev];
-                newVideos[index] = videoFile;
-                return newVideos;
-              });
-              
-              // Clean up the stream
-              if (streams[index]) {
-                streams[index].getTracks().forEach(track => track.stop());
-              }
-              setStreams(prev => {
-                const newStreams = [...prev];
-                newStreams[index] = null as any;
-                return newStreams;
-              });
-              setCurrentRecordingIndex(null);
+                  const videoFile = new File([blob], `answer_${index}.webm`, {
+                    type: 'video/webm;codecs=vp8'
+                  });
+                  
+                  setVideos(prev => {
+                    const newVideos = [...prev];
+                    newVideos[index] = videoFile;
+                    return newVideos;
+                  });
+                } else {
+                  setError('Invalid video dimensions. Please try recording again.');
+                }
+              };
             };
 
-            mediaRecorder.start(1000); // Collect data every second
+            mediaRecorder.start(1000);
             setIsRecording(true);
             setCurrentRecordingIndex(index);
           })
           .catch(err => {
             console.error('Error accessing media devices:', err);
-            setError('Failed to access camera and microphone');
+            setError(`Failed to access camera and microphone: ${err.message}`);
           });
-      } else {
-        // Fallback to the older API
-        const navigatorWithGetUserMedia = navigator as Navigator & {
-          getUserMedia: (
-            constraints: MediaStreamConstraints,
-            successCallback: (stream: MediaStream) => void,
-            errorCallback: (error: Error) => void
-          ) => void;
-        };
-
-        navigatorWithGetUserMedia.getUserMedia(
-          { video: true, audio: true },
-          (stream: MediaStream) => {
-            const video = videoRefs.current[index];
-            if (video) {
-              video.srcObject = stream;
-              video.play();
-            }
-
-            // Store the stream
-            setStreams(prev => {
-              const newStreams = [...prev];
-              newStreams[index] = stream;
-              return newStreams;
-            });
-
-            const mediaRecorder = new MediaRecorder(stream, {
-              mimeType: 'video/webm;codecs=vp9,opus'
-            });
-            mediaRecorderRefs.current[index] = mediaRecorder;
-            chunksRefs.current[index] = [];
-
-            mediaRecorder.ondataavailable = (e) => {
-              if (e.data.size > 0) {
-                chunksRefs.current[index].push(e.data);
-              }
-            };
-
-            mediaRecorder.onstop = () => {
-              const blob = new Blob(chunksRefs.current[index], { type: 'video/webm' });
-              const videoUrl = URL.createObjectURL(blob);
-              setRecordedVideos(prev => {
-                const newVideos = [...prev];
-                newVideos[index] = videoUrl;
-                return newVideos;
-              });
-              setVideos(prev => {
-                const newVideos = [...prev];
-                newVideos[index] = new File([blob], `answer_${index}.webm`, { type: 'video/webm' });
-                return newVideos;
-              });
-              
-              // Clean up the stream
-              if (streams[index]) {
-                streams[index].getTracks().forEach(track => track.stop());
-              }
-              setStreams(prev => {
-                const newStreams = [...prev];
-                newStreams[index] = null as any;
-                return newStreams;
-              });
-              setCurrentRecordingIndex(null);
-            };
-
-            mediaRecorder.start();
-            setIsRecording(true);
-            setCurrentRecordingIndex(index);
-          },
-          (err: Error) => {
-            console.error('Error accessing media devices:', err);
-            setError('Failed to access camera and microphone');
-          }
-        );
       }
     } catch (err) {
       console.error('Recording error:', err);
-      setError('Failed to access camera and microphone');
+      setError(`Failed to start recording: ${err}`);
     }
   };
 
@@ -270,17 +194,35 @@ const JobApplication: React.FC = () => {
     const file = event.target.files?.[0];
     if (file) {
       if (file.type.startsWith('video/')) {
-        setVideos(prev => {
-          const newVideos = [...prev];
-          newVideos[index] = file;
-          return newVideos;
-        });
-        const videoUrl = URL.createObjectURL(file);
-        setUploadedVideos(prev => {
-          const newVideos = [...prev];
-          newVideos[index] = videoUrl;
-          return newVideos;
-        });
+        // Convert uploaded video to WebM format
+        const reader = new FileReader();
+        reader.onload = (e) => {
+          const tempVideo = document.createElement('video');
+          tempVideo.src = e.target?.result as string;
+          
+          tempVideo.onloadedmetadata = () => {
+            if (tempVideo.videoWidth > 0 && tempVideo.videoHeight > 0) {
+              setVideos(prev => {
+                const newVideos = [...prev];
+                newVideos[index] = file;
+                return newVideos;
+              });
+              const videoUrl = URL.createObjectURL(file);
+              setUploadedVideos(prev => {
+                const newVideos = [...prev];
+                newVideos[index] = videoUrl;
+                return newVideos;
+              });
+            } else {
+              setError('Invalid video dimensions. Please upload a different video.');
+            }
+          };
+
+          tempVideo.onerror = () => {
+            setError('Error loading video. Please try a different file.');
+          };
+        };
+        reader.readAsDataURL(file);
       } else {
         setError('Please upload a video file');
       }
@@ -292,27 +234,46 @@ const JobApplication: React.FC = () => {
     setError('');
     setSuccess('');
 
+    if (!token) {
+      setError('You must be logged in to submit an application');
+      return;
+    }
+
     if (videos.some(video => !video)) {
       setError('Please record or upload all video responses');
       return;
     }
 
     if (isSubmitting) {
-      return; // Prevent multiple submissions
+      return;
     }
 
     try {
       setIsSubmitting(true);
-      const validVideos = videos.filter((video): video is File => video !== null);
-      const response = await jobAPI.applyJob(token!, jobId!, validVideos);
+      
+      // Create FormData and validate videos before submission
+      const formData = new FormData();
+      const validVideos = videos.filter((video): video is File => {
+        if (!video) return false;
+        return true;
+      });
+
+      // Simply append each video with its original name
+      validVideos.forEach((video) => {
+        formData.append('videos', video); // This will preserve the original filename
+      });
+
+      const response = await jobAPI.applyForJob(jobId!, validVideos, token);
+      
       if (response.success) {
         setSuccess('Application submitted successfully!');
         setTimeout(() => navigate('/candidate/dashboard'), 2000);
       } else {
         setError(response.message || 'Failed to submit application');
       }
-    } catch (err) {
-      setError('An error occurred while submitting the application');
+    } catch (err: any) {
+      console.error('Application submission error:', err);
+      setError(err.message || 'An error occurred while submitting the application');
     } finally {
       setIsSubmitting(false);
     }
