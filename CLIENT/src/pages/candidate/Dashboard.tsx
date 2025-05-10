@@ -41,6 +41,7 @@ const CandidateDashboard = () => {
   const { token } = useAuth();
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [allJobs, setAllJobs] = useState<any[]>([]);
   const [jobs, setJobs] = useState<any[]>([]);
   const [applications, setApplications] = useState<any[]>([]);
 
@@ -53,11 +54,17 @@ const CandidateDashboard = () => {
           jobAPI.getCandidateApplications(token!)
         ]);
 
-        if (jobsResponse.success) {
-          setJobs(jobsResponse.jobs);
-        }
+        if (jobsResponse.success && applicationsResponse.success) {
+          const allJobsData = jobsResponse.jobs;
+          setAllJobs(allJobsData);
 
-        if (applicationsResponse.success) {
+          // Get list of job IDs that the candidate has already applied for
+          const appliedJobIds = applicationsResponse.applications.map((app: any) => app.job_id);
+
+          // Filter out jobs that the candidate has not applied for
+          const availableJobs = allJobsData.filter((job: any) => !appliedJobIds.includes(job._id));
+
+          setJobs(availableJobs);
           setApplications(applicationsResponse.applications);
         }
       } catch (err) {
@@ -134,6 +141,7 @@ const CandidateDashboard = () => {
       </Typography>
 
       <Grid container spacing={3}>
+        {/* Available Jobs */}
         <Grid item xs={12} md={6}>
           <StyledPaper elevation={3}>
             <Typography variant="h6" gutterBottom>
@@ -183,6 +191,7 @@ const CandidateDashboard = () => {
           </StyledPaper>
         </Grid>
 
+        {/* Your Applications */}
         <Grid item xs={12} md={6}>
           <StyledPaper elevation={3}>
             <Typography variant="h6" gutterBottom>
@@ -190,7 +199,7 @@ const CandidateDashboard = () => {
             </Typography>
             <List>
               {applications.map((application) => {
-                const job = jobs.find(j => j._id === application.job_id);
+                const job = allJobs.find(j => j._id === application.job_id);
                 return (
                   <React.Fragment key={application._id}>
                     <ListItem>
@@ -200,7 +209,7 @@ const CandidateDashboard = () => {
                       <ListItemText
                         primary={
                           <>
-                            {job?.title} at {job?.company_name}
+                            {job ? `${job.title} at ${job.company_name}` : 'Job not found'}
                             {getStatusChip(application.status)}
                           </>
                         }
@@ -225,4 +234,4 @@ const CandidateDashboard = () => {
   );
 };
 
-export default CandidateDashboard; 
+export default CandidateDashboard;

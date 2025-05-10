@@ -2,6 +2,7 @@ from database import get_database
 from models.job import JobPosting, Application, SavedJob, JobQuestion
 from typing import List, Dict, Any, Optional
 from datetime import datetime
+from bson import ObjectId
 
 def create_job_posting(job_data: Dict[str, Any], recruiter_id: str) -> Dict[str, Any]:
     try:
@@ -159,13 +160,10 @@ def update_application_status(application_id: str, status: str) -> Dict[str, Any
             
         applications_collection = db['applications']
         
-        result = applications_collection.update_one(
-            {"_id": application_id},
-            {"$set": {
-                "status": status,
-                "updated_at": datetime.now()
-            }}
-        )
+        result = db['applications'].update_one(
+    {"_id": ObjectId(application_id)},
+    {"$set": {"status": status, "updated_at": datetime.now()}}
+)
         
         if result.modified_count > 0:
             return {
@@ -187,7 +185,7 @@ def request_revaluation(application_id: str) -> Dict[str, Any]:
         applications_collection = db['applications']
         
         result = applications_collection.update_one(
-            {"_id": application_id},
+            {"_id": ObjectId(application_id)},
             {"$set": {
                 "revaluation_requested": True,
                 "revaluation_status": "pending",

@@ -15,6 +15,7 @@ import JobPosting from './pages/recruiter/JobPosting';
 import JobApplications from './pages/recruiter/JobApplications';
 import JobApplication from './pages/candidate/JobApplication';
 
+
 const theme = createTheme({
   palette: {
     primary: {

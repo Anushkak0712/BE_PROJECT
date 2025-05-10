@@ -3,6 +3,7 @@ import { useParams } from 'react-router-dom';
 import { jobAPI } from '../../api/api';
 import { useAuth } from '../../context/AuthContext';
 import { Application } from '../../api/api';
+import { Tooltip} from '@mui/material';
 import {
   Box,
   Typography,
@@ -126,16 +127,31 @@ const JobApplications: React.FC = () => {
     }
   };
 
-  const PersonalityScoreCard = ({ title, value }: { title: string; value: number | undefined }) => (
-    <Paper sx={{ p: 2, textAlign: 'center' }}>
-      <Typography variant="subtitle2" color="text.secondary">
-        {title}
-      </Typography>
-      <Typography variant="h6" color="primary">
-        {value ? value.toFixed(2) : 'N/A'}
-      </Typography>
-    </Paper>
-  );
+ const personalityDescriptions: { [key: string]: string } = {
+    extraversion: 'Extraversion refers to the tendency to seek stimulation in the company of others.',
+    neuroticism: 'Neuroticism refers to the tendency to experience negative emotions like anxiety and depression.',
+    agreeableness: 'Agreeableness reflects the tendency to be compassionate and cooperative.',
+    conscientiousness: 'Conscientiousness refers to being organized, responsible, and hardworking.',
+    openness: 'Openness involves the willingness to experience new things and embrace abstract concepts.'
+  };
+  
+  const PersonalityScoreCard = ({ title, value }: { title: string; value: number | undefined }) => {
+    // Get the description for the title from the JSON object
+    const description = personalityDescriptions[title.toLowerCase()] || 'No description available';
+  
+    return (
+      <Tooltip title={description} arrow>
+        <Paper sx={{ p: 2, textAlign: 'center' }}>
+          <Typography variant="subtitle2" color="text.secondary">
+            {title}
+          </Typography>
+          <Typography variant="h6" color="primary">
+            {value ? value.toFixed(2) : 'N/A'}
+          </Typography>
+        </Paper>
+      </Tooltip>
+    );
+  };
 
   if (loading) {
     return (
@@ -185,15 +201,7 @@ const JobApplications: React.FC = () => {
                   <MenuItem value="shortlisted">Shortlisted</MenuItem>
                   <MenuItem value="rejected">Rejected</MenuItem>
                 </Select>
-                {application.revaluation_status !== 'pending' && (
-                  <Button
-                    variant="contained"
-                    color="warning"
-                    onClick={() => handleRequestRevaluation(application._id)}
-                  >
-                    Request Revaluation
-                  </Button>
-                )}
+                
               </Box>
             </Box>
 
