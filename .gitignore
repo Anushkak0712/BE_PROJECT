@@ -1,0 +1,11 @@
+SERVER/.venv
+SERVER/uploads
+SERVER/test.py
+SERVER/*/__pycache__
+SERVER/__pycache__
+SERVER/*.pyc
+SERVER/first_impressions_model2.keras
+SERVER/.env
+CLIENT/node_modules
+*.h5
+*.keras
